@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Casino Ultra</title>
+<style>
+body{background:#0b0f1a;color:white;font-family:sans-serif;text-align:center}
+.card{background:#12182a;padding:10px;margin:10px;border-radius:10px}
+button{padding:8px;margin:5px;border:none;border-radius:6px;background:gold}
+input{padding:6px;margin:5px}
+canvas{background:#111;border-radius:10px}
+</style>
+</head>
+
+<body>
+
+<h1>🎰 CASINO ULTRA</h1>
+
+<div id="login">
+<input id="name" placeholder="Имя">
+<button onclick="login()">Войти</button>
+</div>
+
+<div id="app" style="display:none">
+
+<h3>Баланс: <span id="balance"></span></h3>
+<input id="bet" placeholder="Ставка">
+
+<div id="games"></div>
+
+<p id="result"></p>
+
+<!-- PLINKO -->
+<div class="card">
+<h2>🎯 Plinko</h2>
+<canvas id="plinko" width="300" height="400"></canvas><br>
+<button onclick="dropBall()">DROP</button>
+</div>
+
+<!-- CRASH -->
+<div class="card">
+<h2>📊 Crash</h2>
+<canvas id="crash" width="300" height="200"></canvas><br>
+<button onclick="startCrash()">START</button>
+</div>
+
+<!-- ADMIN -->
+<div id="admin" style="display:none" class="card">
+<h2>👑 ADMIN Kevin</h2>
+
+<input id="target" placeholder="Игрок">
+<input id="amount" placeholder="Сумма">
+
+<button onclick="give()">+ деньги</button>
+<button onclick="take()">- деньги</button>
+<button onclick="ban()">бан</button>
+<button onclick="unban()">разбан</button>
+<button onclick="premium()">премиум</button>
+
+<hr>
+
+<input id="gname" placeholder="название">
+<input id="chance" placeholder="шанс 0.5">
+<input id="multi" placeholder="множитель">
+<button onclick="addGame()">+ игра</button>
+<button onclick="removeGame()">- игра</button>
+</div>
+
+</div>
+
+<script>
+// ===== DB
+function load(k){return JSON.parse(localStorage.getItem(k)||"[]")}
+function save(k,v){localStorage.setItem(k,JSON.stringify(v))}
+
+let user;
+
+// ===== LOGIN
+function login(){
+let name=document.getElementById("name").value;
+let users=load("users");
+
+user=users.find(u=>u.name==name);
+
+if(!user){
+user={name,balance:10000,admin:name==="Kevin",banned:false,premium:false}
+users.push(user); save("users",users)
+}
+
+if(user.banned) return alert("ты забанен");
+
+login.style.display="none";
+app.style.display="block";
+
+if(user.admin) admin.style.display="block";
+
+update(); renderGames();
+}
+
+function update(){balance.innerText=user.balance}
+
+function saveUser(){
+let users=load("users");
+let i=users.findIndex(u=>u.name==user.name);
+users[i]=user;
+save("users",users);
+update();
+}
+
+// ===== ADMIN
+function getU(){return load("users").find(u=>u.name==target.value)}
+
+function give(){let u=getU();u.balance+=+amount.value;save("users",load("users"));saveUser()}
+function take(){let u=getU();u.balance-=+amount.value;save("users",load("users"));saveUser()}
+function ban(){let u=getU();u.banned=true;save("users",load("users"))}
+function unban(){let u=getU();u.banned=false;save("users",load("users"))}
+function premium(){let u=getU();u.premium=true;save("users",load("users"))}
+
+// ===== GAMES
+function renderGames(){
+let games=load("games");
+gamesDiv.innerHTML="";
+games.forEach(g=>{
+let d=document.createElement("div");
+d.className="card";
+d.innerHTML=\`<h3>\${g.name}</h3><button onclick="play('\${g.id}')">Играть</button>\`;
+gamesDiv.appendChild(d);
+})
+}
+
+function addGame(){
+let games=load("games");
+games.push({id:Date.now(),name:gname.value,chance:+chance.value,multi:+multi.value});
+save("games",games);
+renderGames();
+}
+
+function removeGame(){
+let games=load("games").filter(g=>g.name!==gname.value);
+save("games",games);
+renderGames();
+}
+
+function play(id){
+let g=load("games").find(x=>x.id==id);
+let bet=+document.getElementById("bet").value;
+
+if(user.balance<bet)return;
+
+user.balance-=bet;
+
+if(Math.random()<g.chance){
+let win=bet*g.multi;
+user.balance+=win;
+result.innerText="WIN "+win;
+}else result.innerText="LOSE";
+
+saveUser();
+}
+
+// ===== PLINKO
+let p=document.getElementById("plinko");
+let ctx=p.getContext("2d");
+
+function pins(){
+ctx.fillStyle="white";
+for(let y=50;y<300;y+=40){
+for(let x=50;x<250;x+=40){
+ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fill();
+}}
+}
+
+function dropBall(){
+let x=150,y=0;
+let bet=+document.getElementById("bet").value;
+
+if(user.balance<bet)return;
+
+user.balance-=bet;
+
+let i=setInterval(()=>{
+ctx.clearRect(0,0,300,400);
+pins();
+
+y+=5;
+x+=Math.random()>0.5?5:-5;
+
+ctx.beginPath();
+ctx.arc(x,y,8,0,Math.PI*2);
+ctx.fill();
+
+if(y>350){
+clearInterval(i);
+
+let multi=[0,0.5,1,2,5][Math.floor(Math.random()*5)];
+let win=bet*multi;
+
+user.balance+=win;
+result.innerText="Plinko x"+multi;
+
+saveUser();
+}
+
+},30);
+}
+
+// ===== CRASH
+let c=document.getElementById("crash");
+let cctx=c.getContext("2d");
+
+function startCrash(){
+let x=0,m=1;
+
+let i=setInterval(()=>{
+cctx.fillRect(0,0,300,200);
+
+x+=5;
+m+=0.05;
+
+cctx.fillStyle="lime";
+cctx.fillRect(x,200-m*20,2,2);
+
+if(Math.random()<0.03){
+clearInterval(i);
+result.innerText="Crash x"+m.toFixed(2);
+}
+},50);
+}
+</script>
+
+</body>
+</html>
